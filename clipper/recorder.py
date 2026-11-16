@@ -141,7 +141,7 @@ class LiveStreamChunker:
         if shutil.which("yt-dlp"):
             logger.info("Resolving stream URL via yt-dlp: %s", self.stream_url)
             try:
-                cmd = ["yt-dlp", "-g", "-f", "best", self.stream_url]
+                cmd = ["yt-dlp", "--remote-components", "ejs:github", "--no-warnings", "-g", "-f", "best", self.stream_url]
                 res = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
                 if res.returncode == 0 and res.stdout.strip().startswith("http"):
                     direct_url = res.stdout.strip().split("\n")[0].strip()
