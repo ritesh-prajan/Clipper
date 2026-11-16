@@ -1,0 +1,27 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Pytest / testing cache
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local media outputs, chunks, reviews and SQLite databases
+live_output/
+*.db
+*.db-journal
+
+# Secrets & local configuration
+config.yaml
+.env
+
+# External OpenShorts clone
+openshorts/
+
+# IDE & Editor artifacts
+.vscode/
+.idea/
+*.swp
+*.swo
