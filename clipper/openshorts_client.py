@@ -37,6 +37,10 @@ class PollError(OpenShortsClientError):
     """Exception raised when querying job status fails."""
 
 
+class JobNotFoundError(PollError):
+    """Exception raised when querying job status returns 404 (job deleted or purged)."""
+
+
 class SocialError(OpenShortsClientError):
     """Exception raised during social media posting or query requests."""
 
@@ -320,7 +324,7 @@ class OpenShortsClient:
             raise PollError(f"Network error polling status for {job_id}: {e}") from e
 
         if resp.status_code == 404:
-            raise PollError(f"Job not found: {job_id}")
+            raise JobNotFoundError(f"Job not found: {job_id}")
 
         if resp.status_code != 200:
             raise PollError(f"Failed to fetch job status (HTTP {resp.status_code}): {resp.text}")

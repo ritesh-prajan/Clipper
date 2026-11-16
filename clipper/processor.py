@@ -15,7 +15,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 from clipper.config import AppConfig
 from clipper.db import Database
-from clipper.openshorts_client import OpenShortsClient, OpenShortsClientError
+from clipper.openshorts_client import JobNotFoundError, OpenShortsClient, OpenShortsClientError
 
 logger = logging.getLogger("clipper.processor")
 
@@ -327,6 +327,9 @@ class ClipProcessor:
 
             try:
                 status_data = self.client.poll_status(job_id)
+            except JobNotFoundError as e:
+                logger.error("Job %s not found on server (purged or deleted): %s", job_id, e)
+                return None
             except OpenShortsClientError as e:
                 logger.warning("Failed status poll for %s: %s. Retrying in %.1fs...", job_id, e, poll_interval)
                 time.sleep(poll_interval)
