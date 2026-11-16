@@ -47,6 +47,23 @@ Reviewed against `openshorts/app.py` endpoints, real FFmpeg command specificatio
 
 ---
 
+## Round 3: Local-First Web App & Multi-Account Publishing Architecture
+
+| # | Component | Requirement / Challenge | Fix / Architecture Implemented |
+|---|-----------|-------------------------|--------------------------------|
+| 1 | `clipper/web/` | Local-first OpusClip-style Web Studio | Built FastAPI backend serving compiled React + Tailwind frontend as static assets on default `127.0.0.1:8080`. Single command execution via `python -m clipper.web`. |
+| 2 | `clipper/web/crypto.py` | API Key Security at Rest | Fernet symmetric encryption at rest using key from `CLIPPER_SECRET_KEY` or auto-generated `.clipper_keyfile` (in `.gitignore`). Keys are masked as `••••••••{last4}` in all API responses and logs. |
+| 3 | `clipper/web/fanout.py` | Multi-Account Publishing Fan-out | Posts approved clips across multiple accounts and platforms (YouTube Shorts, Instagram Reels, TikTok). Each account has independent rate limits, minimum gap cooldowns, and jitter delay to prevent platform spam penalties. |
+| 4 | Platform Isolation | TikTok Regional / API Token Failure | Isolated error handling per platform: TikTok token expiration or regional unavailability never blocks publishing to YouTube Shorts or Instagram Reels. |
+| 5 | Idempotency | Duplicate post prevention | `posts_v2` table keyed on `(clip_id, account_id, platform)` ensures no clip is ever double-posted to the same destination. |
+| 6 | `clipper/processor.py` | Gemini Spend Cap Enforcement | Added `gemini_spend_cap_usd` to `AppConfig` and runtime spend tracking. Once the spend ceiling is reached, chunk submission to OpenShorts halts immediately and a persistent banner is displayed in the Web UI. |
+| 7 | `clipper/web/routes/sources.py` | Ownership Gate & Video Upload | Video file uploads (`POST /api/sources/upload`) and stream URLs require affirmative copyright consent (`i_own_or_have_permission=True`) before worker activation. |
+| 8 | `clipper/web/routes/clips.py` | Range-Request Video Streaming | Video preview endpoint `/api/clips/{id}/video` implements HTTP 206 partial content streaming, enabling scrubbing and low memory consumption without buffering full files. |
+| 9 | `clipper/web/routes/logs.py` | Real-Time SSE Log Streaming | Server-Sent Events stream `/api/logs/stream` broadcasts live log records with automatic secret redaction (`_redact`) removing API keys from console output. |
+| 10 | `tests/test_web_e2e.py` | Real FFmpeg Web E2E Integration | Complete end-to-end test using real FFmpeg `lavfi testsrc` through the Web API against a mock OpenShorts server: `record -> chunk -> upload -> process -> review -> approve -> post to two mock accounts`. |
+
+---
+
 ## API Field Verification (from openshorts/app.py — verified against source)
 
 | Endpoint | Verified Request Fields | Verified Response Fields |
@@ -55,9 +72,10 @@ Reviewed against `openshorts/app.py` endpoints, real FFmpeg command specificatio
 | `PUT /api/uploads/{upload_id}` | Raw video bytes in body (streamed via chunked transfer encoding) | `upload_id`, `bytes`, `duration_seconds` |
 | `POST /api/process` | `{"upload_id": str, "acknowledged": true, "output_format": str, "layouts": list}` JSON | `job_id`, `status` |
 | `GET /api/status/{job_id}` | — | `status`, `logs`, `log_times`, `result.clips[].video_url`, `result.clips[].download_url`, `result.clips[].title`, `result.clips[].video_title_for_youtube_short`, `result.clips[].video_description_for_instagram`, `result.clips[].video_description_for_tiktok` |
-| `POST /api/social/post` | `SocialPostRequest`: `job_id`, `clip_index`, `api_key`, `user_id`, `platforms`, `title`, `description`, `scheduled_date`, `timezone` | `request_id` (and other Upload-Post fields) |
+| `POST /api/social/post` | `SocialPostRequest`: `job_id` (str), `clip_index` (int), `api_key` (str, optional), `user_id` (str, optional - maps to Upload-Post profile username), `platforms` (List[str]), `title` (str, optional), `description` (str, optional), `scheduled_date` (ISO-8601 str, optional), `timezone` (str, optional) | `request_id` (str) |
 | `GET /api/social/post-status/{request_id}` | — | `status`, `results[].platform`, `results[].success`, `results[].message` |
-| `GET /api/social/user` | — | `profiles[].username`, `profiles[].connected` |
+| `GET /api/social/user` | — | `profiles[].username`, `profiles[].connected` (List of connected platforms where social_accounts[platform] is a dict) |
+| `GET /api/social/scheduled` | Query param `user` (str, optional) | `profile_username`, `scheduled_posts` (List of scheduled post objects) |
 
 ---
 
@@ -66,7 +84,9 @@ Reviewed against `openshorts/app.py` endpoints, real FFmpeg command specificatio
 1. **`download_url` vs `video_url`**:
    - `download_url` is only present when `MEDIA_SECRET` is configured on the OpenShorts server.
    - On self-hosted OpenShorts without `MEDIA_SECRET`, only relative `video_url` is returned. The client handles both seamlessly by prepending `base_url` when `download_url` is absent.
-2. **`SocialPostRequest.api_key`**:
-   - In cloud mode, `api_key` in the request body is ignored. For self-hosted OpenShorts, `UPLOAD_POST_API_KEY` can be supplied via the request body or configured in the server's `.env`.
+2. **`SocialPostRequest.api_key` and `user_id`**:
+   - In cloud mode, `api_key` in the request body is ignored by OpenShorts (uses managed keys). In self-hosted OpenShorts mode, `api_key` in the request body is forwarded to Upload-Post via `Authorization: Apikey <key>`, and `user_id` is passed as `data_payload["user"]` to specify the profile username.
 3. **Upload-Post Platform Authorization Expiry**:
    - Platform tokens (especially TikTok) may expire periodically on the Upload-Post provider side. The pipeline detects authorization errors and isolates them so failures on one platform never abort posting to healthy platforms (e.g., YouTube Shorts or Instagram Reels).
+4. **TikTok Post Mode (Draft vs Direct)**:
+   - In upstream OpenShorts, `TIKTOK_POST_MODE` defaults to `MEDIA_UPLOAD` which sends videos to TikTok Drafts rather than publishing live directly. Direct live publishing requires TikTok API commercial verification.

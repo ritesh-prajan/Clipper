@@ -12,10 +12,19 @@ htmlcov/
 live_output/
 *.db
 *.db-journal
+*.db-wal
+*.db-shm
 
 # Secrets & local configuration
 config.yaml
 .env
+.clipper_keyfile
+*.keyfile
+
+# Frontend build & dependencies
+frontend/node_modules/
+frontend/dist/
+frontend/.tmp/
 
 # External OpenShorts clone
 openshorts/

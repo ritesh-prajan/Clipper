@@ -86,6 +86,9 @@ class ClipProcessor:
         # List of (global_start_sec, global_end_sec, title)
         self._known_windows: List[Tuple[float, float, str]] = []
 
+        # Gemini spend tracking (USD)
+        self.total_gemini_spend: float = 0.0
+
     def start_workers(self) -> None:
         """Start the background worker thread pool."""
         logger.info("Starting %d processor worker thread(s)...", self.config.max_workers)
@@ -206,6 +209,17 @@ class ClipProcessor:
         # 1. Enforce disk guard before upload
         self.check_and_enforce_disk_limit()
 
+        # Enforce Gemini spend cap
+        if self.config.gemini_spend_cap_usd > 0 and self.total_gemini_spend >= self.config.gemini_spend_cap_usd:
+            logger.warning(
+                "Gemini spend cap reached ($%.2f spent >= $%.2f cap). Halting chunk submission for %s.",
+                self.total_gemini_spend,
+                self.config.gemini_spend_cap_usd,
+                chunk_path.name,
+            )
+            self.db.upsert_chunk(chunk_id, str(chunk_path), status="spend_cap_paused")
+            return
+
         if self.config.dry_run:
             logger.info("[DRY RUN] Skipping OpenShorts upload & process for %s", chunk_path.name)
             self.db.upsert_chunk(chunk_id, str(chunk_path), status="completed")
@@ -250,6 +264,18 @@ class ClipProcessor:
             self.db.upsert_job(job_id=job_id, chunk_id=chunk_id, status="failed")
             self.db.upsert_chunk(chunk_id, str(chunk_path), status="failed")
             return
+
+        # Record spend estimate from job result
+        cost = 0.01
+        if isinstance(result, dict) and "cost_analysis" in result:
+            ca = result.get("cost_analysis")
+            if isinstance(ca, dict) and "total_cost" in ca:
+                try:
+                    cost = float(ca["total_cost"])
+                except Exception:
+                    pass
+        with self._lock:
+            self.total_gemini_spend += cost
 
         self.db.upsert_job(job_id=job_id, chunk_id=chunk_id, status="completed", result_json=result)
         self.db.upsert_chunk(chunk_id, str(chunk_path), status="completed")

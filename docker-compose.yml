@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  openshorts-backend:
+    build:
+      context: ./openshorts
+      dockerfile: Dockerfile
+    container_name: openshorts-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - WHISPER_MODEL=${WHISPER_MODEL:-base}
+      - WHISPER_DEVICE=${WHISPER_DEVICE:-cpu}
+      - WHISPER_COMPUTE=${WHISPER_COMPUTE:-int8}
+      - UPLOAD_POST_API_KEY=${UPLOAD_POST_API_KEY:-}
+    volumes:
+      - ./openshorts/output:/app/output
+      - ./openshorts/uploads:/app/uploads
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  clipper-web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: clipper-web
+    ports:
+      - "8080:8080"
+    depends_on:
+      - openshorts-backend
+    environment:
+      - OPENSHORTS_URL=http://openshorts-backend:8000
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - CLIPPER_SECRET_KEY=${CLIPPER_SECRET_KEY:-}
+      - CLIPPER_PASSWORD=${CLIPPER_PASSWORD:-}
+    volumes:
+      - ./live_output:/app/live_output
+    restart: unless-stopped

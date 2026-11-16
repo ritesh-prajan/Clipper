@@ -139,6 +139,10 @@ class AppConfig(BaseSettings):
         default=2.0,
         description="Initial backoff in seconds between OpenShorts server reachability retries.",
     )
+    gemini_spend_cap_usd: float = Field(
+        default=0.0,
+        description="Spend cap in USD for Gemini API processing (0 = unlimited).",
+    )
 
     @classmethod
     def settings_customise_sources(
