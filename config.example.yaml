@@ -1,0 +1,24 @@
+stream_urls:
+  - "https://twitch.tv/YOUR_CHANNEL"
+i_own_or_have_permission: true   # set only if you own the stream
+
+chunk_seconds: 600
+overlap_seconds: 20
+max_workers: 2
+max_disk_gb: 20.0
+quality: "best"
+
+openshorts_url: "http://localhost:8000"
+# openshorts_api_key: "osk_..."  # or env OPENSHORTS_API_KEY
+
+output_dir: "./live_output"
+cleanup_chunks: false
+auto_approve: false
+dry_run: false
+
+platforms:
+  - "upload_post"
+daily_post_limit:
+  upload_post: 10
+min_post_gap_seconds: 300
+# upload_post_api_key: "..."  # or env UPLOAD_POST_API_KEY
